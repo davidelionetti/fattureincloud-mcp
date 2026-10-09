@@ -13,7 +13,7 @@ MCP server that connects Claude (Desktop, Code, or any MCP client) to **FattureI
 
 > ⚠️ **Unofficial integration.** Not affiliated with, endorsed by, or sponsored by TeamSystem S.p.A., owner of the FattureInCloud trademark. The trademark is used here for descriptive purposes only.
 
-## Features (23 tools)
+## Features (25 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -36,6 +36,8 @@ MCP server that connects Claude (Desktop, Code, or any MCP client) to **FattureI
 | `send_email` | Send a courtesy copy by email |
 | `list_received_documents` | List supplier documents (exposes `cost_center` when present) |
 | `get_received_document` | Full detail of a received document by ID |
+| `list_pending_received_documents` | List supplier documents pending registration (source: agyo / mail / browser) |
+| `get_pending_received_document` | Full detail of a pending received document by ID |
 | `create_received_document` | Create a passive document / expense (optional `cost_center`) |
 | `list_cost_centers` | List configured cost / revenue centers |
 | `get_situation` | Yearly dashboard: net revenue, collected, outstanding, costs, margin |

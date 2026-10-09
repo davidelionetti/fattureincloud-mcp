@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fatture in Cloud MCP Server - v2.0.0
+"""Fatture in Cloud MCP Server - v2.1.0
 
 MCP Server per integrare Fatture in Cloud con Claude AI.
 Permette di gestire fatture elettroniche italiane tramite conversazione.
@@ -26,6 +26,17 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent, ToolAnnotations
 
 import cache
+
+
+def _enum_val(v):
+    """Normalize SDK enum objects (or plain strings) to their string value."""
+    if v is None:
+        return None
+    return str(getattr(v, "value", v))
+
+
+def _date_or_none(v):
+    return str(v) if v else None
 
 
 def _ann(read_only=False, destructive=False, idempotent=False, open_world=True):
@@ -570,6 +581,30 @@ async def list_tools():
                 "type": "object",
                 "properties": {
                     "document_id": {"type": "integer", "description": "ID documento ricevuto"}
+                },
+                "required": ["document_id"]
+            },
+            annotations=_ann(read_only=True, idempotent=True),
+        ),
+        Tool(
+            name="list_pending_received_documents",
+            description="Lista documenti ricevuti IN ATTESA di registrazione (arrivati da SDI/Agyo, email o upload ma non ancora registrati come spesa). Parametri: type (opzionale: agyo, mail, browser — default: agyo), query (opzionale). Read-only.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": ["agyo", "mail", "browser"], "description": "Canale di provenienza: agyo (SDI), mail, browser (default: agyo)"},
+                    "query": {"type": "string", "description": "Filtro testuale su fornitore/oggetto/nome file (opzionale)"}
+                }
+            },
+            annotations=_ann(read_only=True, idempotent=True),
+        ),
+        Tool(
+            name="get_pending_received_document",
+            description="Dettaglio documento ricevuto in attesa di registrazione per ID. Read-only.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "integer", "description": "ID documento in attesa"}
                 },
                 "required": ["document_id"]
             },
@@ -1396,6 +1431,73 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             }
             if d.get("rc_center"):
                 result["cost_center"] = d["rc_center"]
+            return [TextContent(type="text", text=json.dumps(result, indent=2, ensure_ascii=False))]
+
+        elif name == "list_pending_received_documents":
+            source = arguments.get("type", "agyo")
+            query = arguments.get("query")
+            response = received_api.list_pending_received_documents(
+                company_id=COMPANY_ID, type=source, per_page=100, fieldset="detailed"
+            )
+            docs = []
+            for doc in (response.data or []):
+                d = doc.to_dict()
+                supplier = d.get("supplier_name") or ""
+                subject = d.get("subject") or ""
+                if query and query.lower() not in f"{supplier} {subject} {d.get('filename') or ''}".lower():
+                    continue
+                entry = {
+                    "id": d.get("id"),
+                    "date": _date_or_none(d.get("date")),
+                    "supplier": supplier,
+                    "subject": subject[:80],
+                    "document_type": _enum_val(d.get("document_type")),
+                    "total": d.get("amount_gross") or d.get("amount_net") or 0,
+                }
+                if d.get("cost_center"):
+                    entry["cost_center"] = d["cost_center"]
+                if d.get("import_error"):
+                    entry["import_error"] = d["import_error"]
+                docs.append(entry)
+            return [TextContent(type="text", text=json.dumps(docs, indent=2, ensure_ascii=False))]
+
+        elif name == "get_pending_received_document":
+            doc_id = arguments["document_id"]
+            response = received_api.get_pending_received_document(
+                company_id=COMPANY_ID, document_id=doc_id, fieldset="detailed"
+            )
+            d = response.data.to_dict()
+            payments = []
+            for p in d.get("payments_list", []) or []:
+                payments.append({
+                    "amount": p.get("amount"),
+                    "due_date": _date_or_none(p.get("due_date")),
+                    "status": _enum_val(p.get("status")),
+                    "paid_date": _date_or_none(p.get("paid_date")),
+                })
+            currency = d.get("currency")
+            result = {
+                "id": d.get("id"),
+                "source": _enum_val(d.get("type")),
+                "document_type": _enum_val(d.get("document_type")),
+                "date": _date_or_none(d.get("date")),
+                "emission_date": _date_or_none(d.get("emssion_date")),
+                "supplier": d.get("supplier_name"),
+                "subject": d.get("subject"),
+                "filename": d.get("filename"),
+                "category": d.get("category"),
+                "amount_net": d.get("amount_net"),
+                "amount_vat": d.get("amount_vat"),
+                "amount_gross": d.get("amount_gross"),
+                "currency": currency.get("id") if currency else None,
+                "payments": payments,
+                "attachment_url": d.get("attachment_url"),
+                "other_attachments": d.get("other_attachments") or [],
+            }
+            if d.get("cost_center"):
+                result["cost_center"] = d["cost_center"]
+            if d.get("import_error"):
+                result["import_error"] = d["import_error"]
             return [TextContent(type="text", text=json.dumps(result, indent=2, ensure_ascii=False))]
 
         elif name == "create_received_document":
