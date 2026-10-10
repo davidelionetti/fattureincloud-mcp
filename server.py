@@ -46,10 +46,10 @@ def _raw_json(resp):
     The pending-documents endpoints can return datetimes in date fields, which
     the SDK's typed PendingReceivedDocument model rejects, so we bypass it.
     """
-    resp.read()
+    body = resp.read()
     if not 200 <= resp.status < 300:
-        raise RuntimeError(f"HTTP {resp.status}: {(resp.data or b'').decode('utf-8', 'replace')[:300]}")
-    return json.loads(resp.data)
+        raise RuntimeError(f"HTTP {resp.status}: {(body or b'').decode('utf-8', 'replace')[:300]}")
+    return json.loads(body)
 
 
 def _ann(read_only=False, destructive=False, idempotent=False, open_world=True):

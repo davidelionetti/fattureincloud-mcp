@@ -28,7 +28,9 @@ def server_module(tmp_path, monkeypatch):
 def _raw(payload, status=200):
     r = MagicMock()
     r.status = status
-    r.data = json.dumps(payload).encode()
+    # Mimic urllib3 preload_content=False: read() returns the body, .data stays empty.
+    r.read.return_value = json.dumps(payload).encode()
+    r.data = b""
     return r
 
 
