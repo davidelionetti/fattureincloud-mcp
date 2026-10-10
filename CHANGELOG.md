@@ -3,6 +3,7 @@
 ## v2.1.0
 - NEW: `list_pending_received_documents` — lista documenti ricevuti in attesa di registrazione (type: agyo default, mail, browser; filtro `query` opzionale)
 - NEW: `get_pending_received_document` — dettaglio documento in attesa per ID (importi, pagamenti, allegato temporaneo, eventuale errore di import)
+- FIX: i tool "in attesa" leggono la risposta grezza (`_without_preload_content`) perché l'API restituisce datetime nei campi data e il modello tipizzato dell'SDK li rifiuta
 - CHANGE: `mcp` limitato a `<2` (la 2.x rimuove `Server.list_tools` e rompe il server)
 - CHANGE: dipendenza minima `fattureincloud-python-sdk>=2.1.5` (prima versione dell'SDK che espone gli endpoint `received_documents/pending`)
 

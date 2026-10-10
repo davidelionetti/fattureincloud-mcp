@@ -36,7 +36,20 @@ def _enum_val(v):
 
 
 def _date_or_none(v):
-    return str(v) if v else None
+    """Date-only string (YYYY-MM-DD) or None; drops any time component."""
+    return str(v)[:10] if v else None
+
+
+def _raw_json(resp):
+    """Parse a raw (preload_content=False) SDK response into a dict.
+
+    The pending-documents endpoints can return datetimes in date fields, which
+    the SDK's typed PendingReceivedDocument model rejects, so we bypass it.
+    """
+    resp.read()
+    if not 200 <= resp.status < 300:
+        raise RuntimeError(f"HTTP {resp.status}: {(resp.data or b'').decode('utf-8', 'replace')[:300]}")
+    return json.loads(resp.data)
 
 
 def _ann(read_only=False, destructive=False, idempotent=False, open_world=True):
@@ -1436,12 +1449,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         elif name == "list_pending_received_documents":
             source = arguments.get("type", "agyo")
             query = arguments.get("query")
-            response = received_api.list_pending_received_documents(
+            response = received_api.list_pending_received_documents_without_preload_content(
                 company_id=COMPANY_ID, type=source, per_page=100, fieldset="detailed"
             )
             docs = []
-            for doc in (response.data or []):
-                d = doc.to_dict()
+            for d in (_raw_json(response).get("data") or []):
                 supplier = d.get("supplier_name") or ""
                 subject = d.get("subject") or ""
                 if query and query.lower() not in f"{supplier} {subject} {d.get('filename') or ''}".lower():
@@ -1463,10 +1475,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "get_pending_received_document":
             doc_id = arguments["document_id"]
-            response = received_api.get_pending_received_document(
+            response = received_api.get_pending_received_document_without_preload_content(
                 company_id=COMPANY_ID, document_id=doc_id, fieldset="detailed"
             )
-            d = response.data.to_dict()
+            d = _raw_json(response).get("data") or {}
             payments = []
             for p in d.get("payments_list", []) or []:
                 payments.append({
